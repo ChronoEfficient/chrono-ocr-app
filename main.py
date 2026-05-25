@@ -3,15 +3,18 @@ from fastapi import FastAPI, UploadFile, File, Form
 from ocrExtraction import extract_ocr_from_bytes
 from idVerification import verify_sa_id_document
 from bankingVerification import verify_banking_document
+from addressVerification import verify_proof_of_address
 
 from imageQuality import assess_image_quality
 from imagePreprocessing import preprocess_image
 
 from confidenceScoring import calculate_id_confidence
 from bankingConfidenceScoring import calculate_banking_confidence
+from addressConfidenceScoring import calculate_address_confidence
 
 from consistencyChecks import run_id_consistency_checks
 from bankingConsistencyChecks import run_banking_consistency_checks
+from addressConsistencyChecks import run_address_consistency_checks
 
 from storageService import save_document_to_gcs
 
@@ -26,7 +29,8 @@ def health():
         "supported_formats": ["pdf", "png", "jpg", "jpeg"],
         "supported_extractions": [
             "id_document",
-            "proof_of_banking"
+            "proof_of_banking",
+            "proof_of_address"
         ],
         "ocr_strategy": "original_first_preprocessing_fallback",
         "storage_bucket": "scaffold_documents_preprod"
@@ -102,11 +106,46 @@ def build_banking_response(
     }
 
 
+def build_address_response(
+    filename,
+    mime_type,
+    quality_result,
+    ocr_attempt,
+    verification_result,
+    storage_result=None
+):
+    confidence_result = calculate_address_confidence(
+        verification_result,
+        quality_result
+    )
+
+    consistency_result = run_address_consistency_checks(
+        verification_result.get("fields", {})
+    )
+
+    return {
+        "success": verification_result["document_verified"],
+        "expected_type": "proof_of_address",
+        "filename": filename,
+        "mime_type": mime_type,
+        "quality": quality_result,
+        "ocr_attempt": ocr_attempt,
+        "confidence": confidence_result,
+        "consistency": consistency_result,
+        "storage": storage_result,
+        **verification_result
+    }
+
+
 def should_store_id_document(verification_result: dict) -> bool:
     return verification_result.get("document_verified") is True
 
 
 def should_store_banking_document(verification_result: dict) -> bool:
+    return verification_result.get("document_verified") is True
+
+
+def should_store_address_document(verification_result: dict) -> bool:
     return verification_result.get("document_verified") is True
 
 
@@ -329,6 +368,84 @@ async def store_banking(
     return response_without_storage
 
 
+@app.post("/verify/address")
+async def verify_address(file: UploadFile = File(...)):
+    original_file_bytes = await file.read()
+
+    quality_result = assess_image_quality(
+        original_file_bytes,
+        file.content_type
+    )
+
+    original_ocr_result = extract_ocr_from_bytes(
+        file_bytes=original_file_bytes,
+        filename=file.filename,
+        content_type=file.content_type
+    )
+
+    address_verification = verify_proof_of_address(
+        original_ocr_result["text"]
+    )
+
+    return build_address_response(
+        filename=original_ocr_result["filename"],
+        mime_type=original_ocr_result["mime_type"],
+        quality_result=quality_result,
+        ocr_attempt="original",
+        verification_result=address_verification,
+        storage_result=None
+    )
+
+
+@app.post("/store/address")
+async def store_address(
+    file: UploadFile = File(...),
+    employee_number: str = Form(...),
+    document_type: str = Form("Proof_of_address")
+):
+    original_file_bytes = await file.read()
+
+    quality_result = assess_image_quality(
+        original_file_bytes,
+        file.content_type
+    )
+
+    original_ocr_result = extract_ocr_from_bytes(
+        file_bytes=original_file_bytes,
+        filename=file.filename,
+        content_type=file.content_type
+    )
+
+    address_verification = verify_proof_of_address(
+        original_ocr_result["text"]
+    )
+
+    response_without_storage = build_address_response(
+        filename=original_ocr_result["filename"],
+        mime_type=original_ocr_result["mime_type"],
+        quality_result=quality_result,
+        ocr_attempt="original",
+        verification_result=address_verification,
+        storage_result=None
+    )
+
+    storage_result = None
+
+    if should_store_address_document(address_verification):
+        storage_result = save_document_to_gcs(
+            file_bytes=original_file_bytes,
+            filename=file.filename,
+            content_type=file.content_type,
+            employee_number=employee_number,
+            document_type=document_type,
+            metadata=response_without_storage
+        )
+
+    response_without_storage["storage"] = storage_result
+
+    return response_without_storage
+
+
 @app.post("/ocr/document")
 async def ocr_document(file: UploadFile = File(...)):
     file_bytes = await file.read()
@@ -361,6 +478,9 @@ async def extract_document(
 
     if expected_type == "proof_of_banking":
         return await verify_banking(file)
+
+    if expected_type == "proof_of_address":
+        return await verify_address(file)
 
     return {
         "success": False,
