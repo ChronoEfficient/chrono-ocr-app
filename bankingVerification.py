@@ -67,6 +67,22 @@ NON_NAME_PHRASES = [
 ]
 
 
+# Account-holder relationship markers (the bank_details.account_holder enum on
+# the consumer side). These are not person names and must never be returned by
+# extract_account_holder().
+RELATIONSHIP_WORDS = [
+    "OWN",
+    "JOINT",
+    "THIRD PARTY",
+    "OWN ACCOUNT",
+    "JOINT ACCOUNT",
+    "THIRD PARTY ACCOUNT",
+    "SOLE",
+    "PRIMARY",
+    "SECONDARY",
+]
+
+
 def clean_value(value: str):
     if not value:
         return None
@@ -90,6 +106,18 @@ def looks_like_account_type(value: str):
     )
 
 
+def looks_like_relationship(value: str):
+    if not value:
+        return False
+
+    upper_value = value.upper()
+
+    return any(
+        term == upper_value or term in upper_value.split()
+        for term in RELATIONSHIP_WORDS
+    ) or upper_value in RELATIONSHIP_WORDS
+
+
 def looks_like_person_name(value: str):
     if not value:
         return False
@@ -105,6 +133,9 @@ def looks_like_person_name(value: str):
         return False
 
     if looks_like_account_type(value):
+        return False
+
+    if looks_like_relationship(value):
         return False
 
     if re.search(r"\d", value):
@@ -249,14 +280,18 @@ def extract_account_type(text: str):
 
 
 def extract_account_holder(text: str):
+    # Order matters: more specific labels first so "ACCOUNT HOLDER NAME" wins
+    # over the ambiguous "ACCOUNT HOLDER" (which on some SA bank statements
+    # labels the relationship type, e.g. "ACCOUNT HOLDER: OWN").
     value = extract_label_value(
         text,
         [
-            "ACCOUNT HOLDER",
-            "ACCOUNT NAME",
             "NAME OF ACCOUNT HOLDER",
+            "ACCOUNT HOLDER NAME",
+            "ACCOUNT NAME",
             "CLIENT NAME",
-            "CUSTOMER NAME"
+            "CUSTOMER NAME",
+            "ACCOUNT HOLDER"
         ]
     )
 
@@ -354,11 +389,12 @@ def verify_banking_document(text: str, layout=None):
     account_holder = extract_from_layout(
         layout,
         [
-            "ACCOUNT HOLDER",
-            "ACCOUNT NAME",
             "NAME OF ACCOUNT HOLDER",
+            "ACCOUNT HOLDER NAME",
+            "ACCOUNT NAME",
             "CLIENT NAME",
-            "CUSTOMER NAME"
+            "CUSTOMER NAME",
+            "ACCOUNT HOLDER"
         ]
     )
 
