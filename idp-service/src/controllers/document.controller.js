@@ -8,7 +8,9 @@ export async function extractDocument(req, res) {
     if (!req.file) {
       return res.status(400).json({
         status: "error",
-        message: "No document uploaded. Use form-data field name 'document'."
+        code: "FILE_REQUIRED",
+        message: "No document uploaded. Use form-data field name 'document'.",
+        details: []
       });
     }
 
@@ -18,7 +20,9 @@ export async function extractDocument(req, res) {
     if (!documentType) {
       return res.status(400).json({
         status: "error",
-        message: "documentType is required."
+        code: "DOCUMENT_TYPE_REQUIRED",
+        message: "documentType is required.",
+        details: []
       });
     }
 
@@ -26,7 +30,9 @@ export async function extractDocument(req, res) {
       domain,
       documentType,
       filePath,
-      mimeType: req.file.mimetype
+      mimeType: req.file.mimetype,
+      originalName: req.file.originalname,
+      fileSize: req.file.size
     });
 
     return res.status(200).json({
@@ -34,12 +40,19 @@ export async function extractDocument(req, res) {
       ...result
     });
   } catch (error) {
-    console.error("Document extraction failed:", error);
+    console.error("Document extraction failed:", {
+      code: error.code,
+      message: error.message,
+      details: error.details
+    });
 
-    return res.status(500).json({
+    const statusCode = error.statusCode || 500;
+
+    return res.status(statusCode).json({
       status: "error",
-      message: "Document extraction failed",
-      detail: error.message
+      code: error.code || "DOCUMENT_PROCESSING_FAILED",
+      message: error.message || "Document processing failed.",
+      details: Array.isArray(error.details) ? error.details : []
     });
   } finally {
     if (filePath) {

@@ -1,8 +1,14 @@
 import fs from "fs/promises";
 import { getGeminiClient } from "./gemini.client.js";
 import { getDocumentConfiguration } from "./document.registry.js";
+import { validateUploadedFile } from "./file.validator.js";
 
-function validateInput({ domain, documentType, filePath, mimeType }) {
+function validateInput({
+  domain,
+  documentType,
+  filePath,
+  mimeType
+}) {
   if (!domain) {
     throw new Error("domain is required");
   }
@@ -28,7 +34,14 @@ function parseGeminiResponse(responseText) {
   try {
     return JSON.parse(responseText);
   } catch (error) {
-    throw new Error(`Gemini returned invalid JSON: ${error.message}`);
+    const parseError = new Error(
+      `Gemini returned invalid JSON: ${error.message}`
+    );
+
+    parseError.code = "INVALID_MODEL_RESPONSE";
+    parseError.statusCode = 502;
+
+    throw parseError;
   }
 }
 
@@ -71,7 +84,9 @@ export async function processDocument({
   domain,
   documentType,
   filePath,
-  mimeType
+  mimeType,
+  originalName,
+  fileSize
 }) {
   validateInput({
     domain,
@@ -80,7 +95,29 @@ export async function processDocument({
     mimeType
   });
 
-  const normalizedDomain = String(domain).trim().toLowerCase();
+  const fileValidation = await validateUploadedFile({
+    filePath,
+    mimeType,
+    originalName,
+    fileSize
+  });
+
+  if (!fileValidation.valid) {
+    const validationError = new Error(
+      "Uploaded document failed file validation."
+    );
+
+    validationError.code = "FILE_VALIDATION_FAILED";
+    validationError.statusCode = 400;
+    validationError.details = fileValidation.issues;
+
+    throw validationError;
+  }
+
+  const normalizedDomain = String(domain)
+    .trim()
+    .toLowerCase();
+
   const normalizedDocumentType = String(documentType)
     .trim()
     .toUpperCase();
@@ -94,7 +131,8 @@ export async function processDocument({
   const base64Document = fileBuffer.toString("base64");
 
   const client = getGeminiClient();
-  const model = process.env.GEMINI_OCR_MODEL || "gemini-2.5-flash";
+  const model =
+    process.env.GEMINI_OCR_MODEL || "gemini-2.5-flash";
 
   const response = await client.models.generateContent({
     model,
@@ -130,7 +168,9 @@ export async function processDocument({
         issues: []
       };
 
-  const confidence = Number(extractedResult.confidence || 0);
+  const confidence = Number(
+    extractedResult.confidence || 0
+  );
 
   const confidenceThreshold =
     Number(configuration.confidenceThreshold) || 0.9;
@@ -150,7 +190,8 @@ export async function processDocument({
         extractedResult.document_type_detected || null,
       typeMatch:
         extractedResult.is_document_type_match === true,
-      version: configuration.version || "1.0"
+      version: configuration.version || "1.0",
+      file: fileValidation.metadata
     },
 
     extraction: {
@@ -158,13 +199,15 @@ export async function processDocument({
         extractedResult.extraction_status || "FAILED",
       confidence,
       data: extractedResult.fields || {},
-      warnings: Array.isArray(extractedResult.warnings)
+      warnings: Array.isArray(
+        extractedResult.warnings
+      )
         ? extractedResult.warnings
         : []
     },
 
     validation: {
-      valid: validation.valid,
+      valid: validation.valid === true,
       issues: Array.isArray(validation.issues)
         ? validation.issues
         : []

@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { extractDocument } from "../controllers/ocr.controller.js";
+import { extractDocument } from "../controllers/document.controller.js";
 
 const router = express.Router();
 

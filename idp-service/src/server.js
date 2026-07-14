@@ -1,12 +1,11 @@
 import "dotenv/config";
 import express from "express";
-import ocrRoutes from "./routes/ocr.routes.js";
+import documentRoutes from "./routes/document.routes.js";
 
 const app = express();
 
 app.use(express.json());
 
-// Health check endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({
     status: "ok",
@@ -16,21 +15,22 @@ app.get("/health", (req, res) => {
   });
 });
 
-// OCR routes
-app.use("/ocr", ocrRoutes);
+app.use("/documents", documentRoutes);
 
-// Default route
+// Retained temporarily so existing integrations do not break.
+app.use("/ocr", documentRoutes);
+
 app.get("/", (req, res) => {
-  res.json({
-    message: "Chrono Intelligent Document Processing (IDP) Service",
+  res.status(200).json({
+    message: "Chrono Intelligent Document Processing Service",
     endpoints: {
-      health: "/health",
-      extract: "POST /ocr/extract"
+      health: "GET /health",
+      extractDocument: "POST /documents/extract",
+      legacyExtract: "POST /ocr/extract"
     }
   });
 });
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     status: "error",
@@ -38,13 +38,12 @@ app.use((req, res) => {
   });
 });
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
+app.use((error, req, res, next) => {
+  console.error("Unhandled application error:", error);
 
   res.status(500).json({
     status: "error",
-    message: "Internal Server Error"
+    message: "Internal server error"
   });
 });
 
@@ -54,9 +53,10 @@ app.listen(port, () => {
   console.log("==================================");
   console.log(" Chrono IDP Service Started");
   console.log("==================================");
-  console.log(`Environment : ${process.env.NODE_ENV || "development"}`);
-  console.log(`Port        : ${port}`);
-  console.log(`Health URL  : http://localhost:${port}/health`);
-  console.log(`OCR URL     : http://localhost:${port}/ocr/extract`);
+  console.log(`Environment  : ${process.env.NODE_ENV || "development"}`);
+  console.log(`Port         : ${port}`);
+  console.log(`Health       : http://localhost:${port}/health`);
+  console.log(`Documents API: http://localhost:${port}/documents/extract`);
+  console.log(`Legacy API   : http://localhost:${port}/ocr/extract`);
   console.log("==================================");
 });
