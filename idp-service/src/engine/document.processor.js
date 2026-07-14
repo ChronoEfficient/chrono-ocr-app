@@ -2,20 +2,94 @@ import fs from "fs/promises";
 import { getGeminiClient } from "./gemini.client.js";
 import { getDocumentConfiguration } from "./document.registry.js";
 
+function validateInput({ domain, documentType, filePath, mimeType }) {
+  if (!domain) {
+    throw new Error("domain is required");
+  }
+
+  if (!documentType) {
+    throw new Error("documentType is required");
+  }
+
+  if (!filePath) {
+    throw new Error("filePath is required");
+  }
+
+  if (!mimeType) {
+    throw new Error("mimeType is required");
+  }
+}
+
+function parseGeminiResponse(responseText) {
+  if (!responseText) {
+    throw new Error("Gemini returned an empty response.");
+  }
+
+  try {
+    return JSON.parse(responseText);
+  } catch (error) {
+    throw new Error(`Gemini returned invalid JSON: ${error.message}`);
+  }
+}
+
+function buildReviewReasons({
+  validation,
+  extractedResult,
+  confidence,
+  confidenceThreshold
+}) {
+  const reasons = [];
+
+  if (Array.isArray(validation?.issues)) {
+    reasons.push(...validation.issues);
+  }
+
+  if (!extractedResult.is_document_type_match) {
+    reasons.push(
+      "Uploaded document does not match the requested document type."
+    );
+  }
+
+  if (extractedResult.extraction_status !== "SUCCESS") {
+    reasons.push(
+      `Extraction status is ${
+        extractedResult.extraction_status || "UNKNOWN"
+      }.`
+    );
+  }
+
+  if (confidence < confidenceThreshold) {
+    reasons.push(
+      `Confidence ${confidence} is below the threshold ${confidenceThreshold}.`
+    );
+  }
+
+  return [...new Set(reasons)];
+}
+
 export async function processDocument({
   domain,
   documentType,
   filePath,
   mimeType
 }) {
-  validateRequest({
+  validateInput({
     domain,
     documentType,
     filePath,
     mimeType
   });
 
-  const configuration = getDocumentConfiguration(domain, documentType);
+  const normalizedDomain = String(domain).trim().toLowerCase();
+  const normalizedDocumentType = String(documentType)
+    .trim()
+    .toUpperCase();
+
+  const configuration = getDocumentConfiguration(
+    normalizedDomain,
+    normalizedDocumentType
+  );
+
   const fileBuffer = await fs.readFile(filePath);
   const base64Document = fileBuffer.toString("base64");
 
@@ -47,43 +121,59 @@ export async function processDocument({
     }
   });
 
-  if (!response.text) {
-    throw new Error("Gemini returned an empty response");
-  }
+  const extractedResult = parseGeminiResponse(response.text);
 
-  let result;
+  const validation = configuration.validate
+    ? configuration.validate(extractedResult)
+    : {
+        valid: true,
+        issues: []
+      };
 
-  try {
-    result = JSON.parse(response.text);
-  } catch (error) {
-    throw new Error(`Gemini returned invalid JSON: ${error.message}`);
-  }
+  const confidence = Number(extractedResult.confidence || 0);
 
-  if (configuration.validate) {
-    result.validation = configuration.validate(result);
-  }
+  const confidenceThreshold =
+    Number(configuration.confidenceThreshold) || 0.9;
+
+  const reviewReasons = buildReviewReasons({
+    validation,
+    extractedResult,
+    confidence,
+    confidenceThreshold
+  });
 
   return {
-    domain,
-    documentType,
-    result
+    document: {
+      domain: normalizedDomain,
+      type: normalizedDocumentType,
+      detectedType:
+        extractedResult.document_type_detected || null,
+      typeMatch:
+        extractedResult.is_document_type_match === true,
+      version: configuration.version || "1.0"
+    },
+
+    extraction: {
+      status:
+        extractedResult.extraction_status || "FAILED",
+      confidence,
+      data: extractedResult.fields || {},
+      warnings: Array.isArray(extractedResult.warnings)
+        ? extractedResult.warnings
+        : []
+    },
+
+    validation: {
+      valid: validation.valid,
+      issues: Array.isArray(validation.issues)
+        ? validation.issues
+        : []
+    },
+
+    review: {
+      required: reviewReasons.length > 0,
+      reasons: reviewReasons,
+      confidenceThreshold
+    }
   };
-}
-
-function validateRequest({ domain, documentType, filePath, mimeType }) {
-  if (!domain) {
-    throw new Error("domain is required");
-  }
-
-  if (!documentType) {
-    throw new Error("documentType is required");
-  }
-
-  if (!filePath) {
-    throw new Error("filePath is required");
-  }
-
-  if (!mimeType) {
-    throw new Error("mimeType is required");
-  }
 }

@@ -1,39 +1,49 @@
-import { extractWithGemini } from "../services/gemini.service.js";
+import fs from "fs/promises";
+import { processDocument } from "../engine/document.processor.js";
 
 export async function extractDocument(req, res) {
-  try {
-    const documentType = req.body.documentType;
+  const filePath = req.file?.path;
 
+  try {
     if (!req.file) {
       return res.status(400).json({
-        error: "No document uploaded. Use form-data field name 'document'."
+        status: "error",
+        message: "No document uploaded. Use form-data field name 'document'."
       });
     }
+
+    const domain = req.body.domain || "hr";
+    const documentType = req.body.documentType;
 
     if (!documentType) {
       return res.status(400).json({
-        error: "documentType is required."
+        status: "error",
+        message: "documentType is required."
       });
     }
 
-    const result = await extractWithGemini({
-      filePath: req.file.path,
-      mimeType: req.file.mimetype,
-      documentType
+    const result = await processDocument({
+      domain,
+      documentType,
+      filePath,
+      mimeType: req.file.mimetype
     });
 
-    return res.json({
+    return res.status(200).json({
       status: "success",
-      documentType,
-      result
+      ...result
     });
   } catch (error) {
-    console.error("OCR extraction failed:", error);
+    console.error("Document extraction failed:", error);
 
     return res.status(500).json({
       status: "error",
-      message: "OCR extraction failed",
+      message: "Document extraction failed",
       detail: error.message
     });
+  } finally {
+    if (filePath) {
+      await fs.unlink(filePath).catch(() => {});
+    }
   }
 }
