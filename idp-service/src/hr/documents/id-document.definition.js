@@ -54,5 +54,16 @@ export const idDocumentDefinition = {
       ".pdf"
     ],
     maximumFileSizeMb: 10
+  },
+
+  qualityPolicy: {
+    minimumWidth: 600,
+    minimumHeight: 400,
+    minimumPixelCount: 300000,
+    minimumSharpnessScore: 12,
+    rejectBelowWidth: 250,
+    rejectBelowHeight: 150,
+    rejectUnacceptableImage: true,
+    reviewOnWarning: true
   }
 };

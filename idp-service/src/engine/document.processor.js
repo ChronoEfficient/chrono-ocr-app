@@ -2,13 +2,20 @@ import fs from "fs/promises";
 import { getGeminiClient } from "./gemini.client.js";
 import { getDocumentConfiguration } from "./document.registry.js";
 import { validateUploadedFile } from "./file.validator.js";
+import { assessDocumentQuality } from "./document-quality.assessor.js";
+import { evaluateReview } from "./review.engine.js";
 
 function validateInput({
+  processingId,
   domain,
   documentType,
   filePath,
   mimeType
 }) {
+  if (!processingId) {
+    throw new Error("processingId is required");
+  }
+
   if (!domain) {
     throw new Error("domain is required");
   }
@@ -50,87 +57,8 @@ function parseGeminiResponse(responseText) {
   }
 }
 
-function isMissingRequiredValue(value) {
-  return (
-    value === null ||
-    value === undefined ||
-    (typeof value === "string" && value.trim() === "")
-  );
-}
-
-function buildReviewReasons({
-  validation,
-  extractedResult,
-  confidence,
-  confidenceThreshold,
-  reviewPolicy
-}) {
-  const reasons = [];
-
-  if (
-    reviewPolicy.reviewOnValidationFailure !== false &&
-    Array.isArray(validation?.issues)
-  ) {
-    reasons.push(...validation.issues);
-  }
-
-  if (
-    reviewPolicy.reviewOnTypeMismatch !== false &&
-    extractedResult.is_document_type_match !== true
-  ) {
-    reasons.push(
-      "Uploaded document does not match the requested document type."
-    );
-  }
-
-  if (
-    reviewPolicy.reviewOnExtractionFailure !== false &&
-    extractedResult.extraction_status !== "SUCCESS"
-  ) {
-    reasons.push(
-      `Extraction status is ${
-        extractedResult.extraction_status || "UNKNOWN"
-      }.`
-    );
-  }
-
-  if (
-    reviewPolicy.reviewOnLowConfidence !== false &&
-    confidence < confidenceThreshold
-  ) {
-    reasons.push(
-      `Confidence ${confidence} is below the threshold ${confidenceThreshold}.`
-    );
-  }
-
-  const requiredFields = Array.isArray(reviewPolicy.requiredFields)
-    ? reviewPolicy.requiredFields
-    : [];
-
-  const extractedFields =
-    extractedResult?.fields &&
-    typeof extractedResult.fields === "object"
-      ? extractedResult.fields
-      : {};
-
-  for (const fieldName of requiredFields) {
-    if (isMissingRequiredValue(extractedFields[fieldName])) {
-      reasons.push(
-        `Required field '${fieldName}' was not extracted.`
-      );
-    }
-  }
-
-  if (reviewPolicy.alwaysReview === true) {
-    reasons.push(
-      "Human review is required by the document review policy."
-    );
-  }
-
-  return [...new Set(reasons)];
-}
-
 export async function processDocument({
+  processingId,
   domain,
   documentType,
   filePath,
@@ -139,11 +67,14 @@ export async function processDocument({
   fileSize
 }) {
   validateInput({
+    processingId,
     domain,
     documentType,
     filePath,
     mimeType
   });
+
+  const startedAt = new Date();
 
   const normalizedDomain = String(domain)
     .trim()
@@ -174,6 +105,27 @@ export async function processDocument({
     error.code = "FILE_VALIDATION_FAILED";
     error.statusCode = 400;
     error.details = fileValidation.issues;
+
+    throw error;
+  }
+
+  const qualityAssessment = await assessDocumentQuality({
+    filePath,
+    mimeType,
+    qualityPolicy: configuration.qualityPolicy
+  });
+
+  if (
+    qualityAssessment.acceptable === false &&
+    configuration.qualityPolicy?.rejectUnacceptableImage !== false
+  ) {
+    const error = new Error(
+      "Uploaded document failed image-quality assessment."
+    );
+
+    error.code = "DOCUMENT_QUALITY_FAILED";
+    error.statusCode = 400;
+    error.details = qualityAssessment.issues;
 
     throw error;
   }
@@ -232,37 +184,24 @@ export async function processDocument({
         derivedData: {}
       };
 
-  const confidence = Number(
-    extractedResult.confidence || 0
-  );
-
-  const reviewPolicy =
-    configuration.reviewPolicy || {};
-
-  const configuredThreshold = Number(
-    reviewPolicy.confidenceThreshold
-  );
-
-  const confidenceThreshold =
-    Number.isFinite(configuredThreshold) &&
-    configuredThreshold > 0
-      ? configuredThreshold
-      : 0.9;
-
-  const reviewReasons = buildReviewReasons({
+  const review = evaluateReview({
     validation,
     extractedResult,
-    confidence,
-    confidenceThreshold,
-    reviewPolicy
+    qualityAssessment,
+    reviewPolicy: configuration.reviewPolicy || {},
+    qualityPolicy: configuration.qualityPolicy || {}
   });
+
+  const completedAt = new Date();
+
+  const durationMs =
+    completedAt.getTime() - startedAt.getTime();
 
   return {
     document: {
       domain: normalizedDomain,
       type: normalizedDocumentType,
-      name:
-        configuration.name || normalizedDocumentType,
+      name: configuration.name || normalizedDocumentType,
       detectedType:
         extractedResult.document_type_detected || null,
       typeMatch:
@@ -271,10 +210,14 @@ export async function processDocument({
       file: fileValidation.metadata
     },
 
+    quality: qualityAssessment,
+
     extraction: {
       status:
         extractedResult.extraction_status || "FAILED",
-      confidence,
+      confidence: Number(
+        extractedResult.confidence || 0
+      ),
       data: extractedResult.fields || {},
       warnings: Array.isArray(
         extractedResult.warnings
@@ -295,34 +238,16 @@ export async function processDocument({
           : {}
     },
 
-    review: {
-      required: reviewReasons.length > 0,
-      reasons: reviewReasons,
-      confidenceThreshold,
-      policy: {
-        alwaysReview:
-          reviewPolicy.alwaysReview === true,
-        reviewOnTypeMismatch:
-          reviewPolicy.reviewOnTypeMismatch !== false,
-        reviewOnExtractionFailure:
-          reviewPolicy.reviewOnExtractionFailure !== false,
-        reviewOnValidationFailure:
-          reviewPolicy.reviewOnValidationFailure !== false,
-        reviewOnLowConfidence:
-          reviewPolicy.reviewOnLowConfidence !== false,
-        requiredFields: Array.isArray(
-          reviewPolicy.requiredFields
-        )
-          ? reviewPolicy.requiredFields
-          : []
-      }
-    },
+    review,
 
     processing: {
       model,
       temperature,
       definitionVersion:
-        configuration.version || "1.0"
+        configuration.version || "1.0",
+      startedAt: startedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      durationMs
     }
   };
 }
