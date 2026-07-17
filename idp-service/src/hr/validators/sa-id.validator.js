@@ -58,7 +58,9 @@ function deriveDateOfBirth(idNumber) {
 function deriveGender(idNumber) {
   const genderSequence = Number(idNumber.slice(6, 10));
 
-  return genderSequence >= 5000 ? "MALE" : "FEMALE";
+  return genderSequence >= 5000
+    ? "MALE"
+    : "FEMALE";
 }
 
 function deriveCitizenshipStatus(idNumber) {
@@ -75,9 +77,16 @@ function deriveCitizenshipStatus(idNumber) {
   return null;
 }
 
-export function validateIdDocument(result) {
+export function validateIdDocument(result = {}) {
   const issues = [];
-  const fields = result?.fields || {};
+
+  const fields =
+    result &&
+    typeof result === "object" &&
+    !Array.isArray(result)
+      ? result
+      : {};
+
   const idNumber = fields.id_number;
 
   if (!idNumber) {
@@ -116,7 +125,7 @@ export function validateIdDocument(result) {
   ) {
     issues.push(
       `Extracted date of birth '${fields.date_of_birth}' does not match ` +
-        `the ID-number date '${derivedDateOfBirth}'.`
+      `the ID-number date '${derivedDateOfBirth}'.`
     );
   }
 
@@ -126,7 +135,7 @@ export function validateIdDocument(result) {
   ) {
     issues.push(
       `Extracted gender '${fields.gender}' does not match ` +
-        `the ID-number gender '${derivedGender}'.`
+      `the ID-number gender '${derivedGender}'.`
     );
   }
 
@@ -140,8 +149,7 @@ export function validateIdDocument(result) {
   ) {
     issues.push(
       `Extracted citizenship status '${fields.citizenship_status}' ` +
-        `does not match the ID-number status ` +
-        `'${derivedCitizenshipStatus}'.`
+      `does not match the ID-number status '${derivedCitizenshipStatus}'.`
     );
   }
 
