@@ -92,7 +92,12 @@ export function validateIdDocument(result = {}) {
   if (!idNumber) {
     return {
       valid: false,
-      issues: ["ID number was not extracted."],
+      issues: [
+        {
+          code: "MISSING_ID_NUMBER",
+          field: "id_number"
+        }
+      ],
       derivedData: {}
     };
   }
@@ -101,7 +106,10 @@ export function validateIdDocument(result = {}) {
     return {
       valid: false,
       issues: [
-        "South African ID number must contain exactly 13 digits."
+        {
+          code: "INVALID_ID_LENGTH",
+          field: "id_number"
+        }
       ],
       derivedData: {}
     };
@@ -113,9 +121,10 @@ export function validateIdDocument(result = {}) {
     deriveCitizenshipStatus(idNumber);
 
   if (!derivedDateOfBirth) {
-    issues.push(
-      "The date encoded in the South African ID number is invalid."
-    );
+    issues.push({
+      code: "INVALID_ID_DATE",
+      field: "id_number"
+    });
   }
 
   if (
@@ -123,40 +132,48 @@ export function validateIdDocument(result = {}) {
     fields.date_of_birth &&
     fields.date_of_birth !== derivedDateOfBirth
   ) {
-    issues.push(
-      `Extracted date of birth '${fields.date_of_birth}' does not match ` +
-      `the ID-number date '${derivedDateOfBirth}'.`
-    );
+    issues.push({
+      code: "DATE_OF_BIRTH_MISMATCH",
+      field: "date_of_birth",
+      expected: derivedDateOfBirth,
+      actual: fields.date_of_birth
+    });
   }
 
   if (
     fields.gender &&
     fields.gender !== derivedGender
   ) {
-    issues.push(
-      `Extracted gender '${fields.gender}' does not match ` +
-      `the ID-number gender '${derivedGender}'.`
-    );
+    issues.push({
+      code: "GENDER_MISMATCH",
+      field: "gender",
+      expected: derivedGender,
+      actual: fields.gender
+    });
   }
 
   if (!derivedCitizenshipStatus) {
-    issues.push(
-      "The citizenship digit in the South African ID number is invalid."
-    );
+    issues.push({
+      code: "INVALID_CITIZENSHIP_DIGIT",
+      field: "id_number"
+    });
   } else if (
     fields.citizenship_status &&
     fields.citizenship_status !== derivedCitizenshipStatus
   ) {
-    issues.push(
-      `Extracted citizenship status '${fields.citizenship_status}' ` +
-      `does not match the ID-number status '${derivedCitizenshipStatus}'.`
-    );
+    issues.push({
+      code: "CITIZENSHIP_STATUS_MISMATCH",
+      field: "citizenship_status",
+      expected: derivedCitizenshipStatus,
+      actual: fields.citizenship_status
+    });
   }
 
   if (!passesLuhnCheck(idNumber)) {
-    issues.push(
-      "South African ID number failed checksum validation."
-    );
+    issues.push({
+      code: "INVALID_ID_CHECKSUM",
+      field: "id_number"
+    });
   }
 
   return {
