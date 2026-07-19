@@ -1,6 +1,6 @@
 import fs from "fs/promises";
-import { processDocument } from "../engine/document.processor.js";
-import { validateProcessingId } from "../engine/processing-id.validator.js";
+import { processDocument } from "../../engine/document.processor.js";
+import { validateProcessingId } from "../../engine/processing-id.validator.js";
 
 export async function extractDocument(req, res) {
   const filePath = req.file?.path;

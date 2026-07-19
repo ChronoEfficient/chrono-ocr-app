@@ -1,61 +1,10 @@
-// src/hr/normalizers/id-document.normalizer.js
-
-function normalizeText(value) {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  const normalized = String(value).trim();
-
-  return normalized || null;
-}
-
-function normalizeUppercase(value) {
-  const normalized = normalizeText(value);
-
-  return normalized
-    ? normalized.toUpperCase()
-    : null;
-}
-
-function normalizePersonName(value) {
-  const normalized = normalizeText(value);
-
-  if (!normalized) {
-    return null;
-  }
-
-  return normalized
-    .toLowerCase()
-    .split(/\s+/)
-    .map((word) =>
-      word
-        .split("-")
-        .map((part) =>
-          part
-            .split("'")
-            .map((piece) =>
-              piece
-                ? piece.charAt(0).toUpperCase() +
-                  piece.slice(1)
-                : piece
-            )
-            .join("'")
-        )
-        .join("-")
-    )
-    .join(" ");
-}
-
-function normalizeDigits(value) {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  const digits = String(value).replace(/\D/g, "");
-
-  return digits || null;
-}
+import {
+  normalizeText,
+  normalizeUppercase,
+  normalizePersonName,
+  normalizeDigits,
+  normalizeDate
+} from "../../engine/normalizers/base.normalizer.js";
 
 function normalizeGender(value) {
   const normalized = normalizeUppercase(value);
@@ -68,6 +17,7 @@ function normalizeGender(value) {
     M: "MALE",
     MALE: "MALE",
     MAN: "MALE",
+
     F: "FEMALE",
     FEMALE: "FEMALE",
     WOMAN: "FEMALE"
@@ -117,78 +67,6 @@ function normalizeCitizenshipStatus(value) {
   return citizenshipMap[normalized] || normalized;
 }
 
-function isValidDate(year, month, day) {
-  const date = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
-}
-
-function normalizeDate(value) {
-  const normalized = normalizeText(value);
-
-  if (!normalized) {
-    return null;
-  }
-
-  const isoDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-  let match = normalized.match(isoDatePattern);
-
-  if (match) {
-    const [, year, month, day] = match;
-
-    if (
-      !isValidDate(
-        Number(year),
-        Number(month),
-        Number(day)
-      )
-    ) {
-      return null;
-    }
-
-    return normalized;
-  }
-
-  const slashOrDashPattern =
-    /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/;
-
-  match = normalized.match(slashOrDashPattern);
-
-  if (match) {
-    const [, day, month, year] = match;
-
-    if (
-      !isValidDate(
-        Number(year),
-        Number(month),
-        Number(day)
-      )
-    ) {
-      return null;
-    }
-
-    return (
-      `${year}-` +
-      `${month.padStart(2, "0")}-` +
-      `${day.padStart(2, "0")}`
-    );
-  }
-
-  return null;
-}
-
-/**
- * Normalize canonical South African ID document fields.
- *
- * The processor passes only the extracted `fields` object into this function.
- * Extraction metadata such as confidence, status, warnings and detected type
- * remains the responsibility of document.processor.js.
- */
 export function normalizeIdDocument(fields = {}) {
   const source =
     fields &&
@@ -198,17 +76,13 @@ export function normalizeIdDocument(fields = {}) {
       : {};
 
   return {
-    surname: normalizePersonName(
-      source.surname
-    ),
+    surname: normalizePersonName(source.surname),
 
     given_names: normalizePersonName(
       source.given_names
     ),
 
-    gender: normalizeGender(
-      source.gender
-    ),
+    gender: normalizeGender(source.gender),
 
     nationality: normalizeCountry(
       source.nationality

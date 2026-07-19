@@ -5,6 +5,10 @@ import { GoogleGenAI } from "@google/genai";
 
 let client = null;
 
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const DEFAULT_TEMPERATURE = 0;
+const DEFAULT_RESPONSE_MIME_TYPE = "application/json";
+
 const PRIORITY_PAYGO_HEADERS = Object.freeze({
   "X-Vertex-AI-LLM-Request-Type": "shared",
   "X-Vertex-AI-LLM-Shared-Request-Type": "priority"
@@ -128,17 +132,82 @@ function parseJsonResponse(response) {
   }
 }
 
+function resolveAiConfiguration(ai = {}) {
+  const provider =
+    ai.provider?.trim().toLowerCase() ||
+    "gemini";
+
+  if (provider !== "gemini") {
+    throw new TypeError(
+      `Unsupported AI provider: ${provider}`
+    );
+  }
+
+  const model =
+    ai.model?.trim() ||
+    process.env.GEMINI_MODEL?.trim() ||
+    DEFAULT_GEMINI_MODEL;
+
+  const temperature =
+    ai.temperature ??
+    DEFAULT_TEMPERATURE;
+
+  const maxOutputTokens =
+    ai.maxOutputTokens ??
+    null;
+
+  const responseMimeType =
+    ai.responseMimeType?.trim() ||
+    DEFAULT_RESPONSE_MIME_TYPE;
+
+  if (
+    typeof temperature !== "number" ||
+    Number.isNaN(temperature) ||
+    !Number.isFinite(temperature)
+  ) {
+    throw new TypeError(
+      "Gemini temperature must be a finite number."
+    );
+  }
+
+  if (
+    maxOutputTokens !== null &&
+    (
+      !Number.isInteger(maxOutputTokens) ||
+      maxOutputTokens <= 0
+    )
+  ) {
+    throw new TypeError(
+      "Gemini maxOutputTokens must be a positive integer or null."
+    );
+  }
+
+  return {
+    provider,
+    model,
+    temperature,
+    maxOutputTokens,
+    responseMimeType
+  };
+}
+
 function validateExtractionArguments({
-  model,
+  ai,
   prompt,
   schema,
   filePath,
-  mimeType,
-  temperature
+  mimeType
 }) {
-  if (!model || typeof model !== "string") {
+  if (
+    ai !== undefined &&
+    ai !== null &&
+    (
+      typeof ai !== "object" ||
+      Array.isArray(ai)
+    )
+  ) {
     throw new TypeError(
-      "A valid Gemini model name is required."
+      "Gemini AI configuration must be an object."
     );
   }
 
@@ -148,7 +217,11 @@ function validateExtractionArguments({
     );
   }
 
-  if (!schema || typeof schema !== "object") {
+  if (
+    !schema ||
+    typeof schema !== "object" ||
+    Array.isArray(schema)
+  ) {
     throw new TypeError(
       "A valid Gemini response schema is required."
     );
@@ -165,33 +238,61 @@ function validateExtractionArguments({
       "A valid document MIME type is required."
     );
   }
+}
 
-  if (
-    typeof temperature !== "number" ||
-    Number.isNaN(temperature)
-  ) {
-    throw new TypeError(
-      "Gemini temperature must be a valid number."
-    );
+function buildGenerationConfig({
+  schema,
+  temperature,
+  maxOutputTokens,
+  responseMimeType
+}) {
+  const config = {
+    responseMimeType,
+    responseSchema: schema,
+    temperature,
+
+    /*
+     * Priority PayGo must be requested through HTTP
+     * headers on the individual Vertex AI request.
+     */
+    httpOptions: {
+      headers: PRIORITY_PAYGO_HEADERS
+    }
+  };
+
+  /*
+   * Do not pass null to the Gemini SDK. When omitted,
+   * the model or service default is used.
+   */
+  if (maxOutputTokens !== null) {
+    config.maxOutputTokens = maxOutputTokens;
   }
+
+  return config;
 }
 
 export async function extractDocumentWithGemini({
-  model,
+  ai = {},
   prompt,
   schema,
   filePath,
-  mimeType,
-  temperature = 0.1
+  mimeType
 }) {
   validateExtractionArguments({
-    model,
+    ai,
     prompt,
     schema,
     filePath,
-    mimeType,
-    temperature
+    mimeType
   });
+
+  const {
+    provider,
+    model,
+    temperature,
+    maxOutputTokens,
+    responseMimeType
+  } = resolveAiConfiguration(ai);
 
   const documentBuffer =
     await fs.readFile(filePath);
@@ -225,28 +326,27 @@ export async function extractDocumentWithGemini({
         }
       ],
 
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
+      config: buildGenerationConfig({
+        schema,
         temperature,
-
-        /*
-         * Priority PayGo must be requested through HTTP
-         * headers on the individual Vertex AI request.
-         */
-        httpOptions: {
-          headers: PRIORITY_PAYGO_HEADERS
-        }
-      }
+        maxOutputTokens,
+        responseMimeType
+      })
     });
 
   const json =
     parseJsonResponse(response);
 
+  const PROVIDERS = {
+    GEMINI: "GOOGLE_VERTEX_AI"
+  };
+
   return {
     extraction: json,
 
     metadata: {
+      provider: PROVIDERS.GEMINI,
+      aiProvider: provider,
       model,
 
       /*
@@ -258,13 +358,17 @@ export async function extractDocumentWithGemini({
           response.usageMetadata
         ),
 
+      finishReason:
+        parseFinishReason(response),
+
       tokenUsage:
         parseTokenUsage(
           response.usageMetadata
         ),
 
-      finishReason:
-        parseFinishReason(response)
+      temperature,
+      maxOutputTokens,
+      responseMimeType
     }
   };
 }

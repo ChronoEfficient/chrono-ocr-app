@@ -1,12 +1,12 @@
-import { buildIdDocumentPrompt } from "../prompts/id-document.prompt.js";
-import { idDocumentSchema } from "../schemas/id-document.schema.js";
-import { normalizeIdDocument } from "../normalizers/id-document.normalizer.js";
-import { validateIdDocument } from "../validators/sa-id.validator.js";
+import { buildBankConfirmationPrompt } from "../prompts/bank-confirmation.prompt.js";
+import { bankConfirmationSchema } from "../schemas/bank-confirmation.schema.js";
+import { normalizeBankConfirmation } from "../normalizers/bank-confirmation.normalizer.js";
+import { validateBankConfirmation } from "../validators/bank-confirmation.validator.js";
 
-export const idDocumentDefinition = {
+export const bankConfirmationDefinition = {
   domain: "hr",
-  documentType: "ID_DOCUMENT",
-  name: "South African Identity Document",
+  documentType: "BANK_CONFIRMATION",
+  name: "Bank Confirmation",
   version: "1.0",
 
   ai: {
@@ -16,30 +16,28 @@ export const idDocumentDefinition = {
     maxOutputTokens: null // Uses service default if null
   },
 
-  buildPrompt: buildIdDocumentPrompt,
-  schema: idDocumentSchema,
-  normalize: normalizeIdDocument,
-  validate: validateIdDocument,
+  buildPrompt: buildBankConfirmationPrompt,
+  schema: bankConfirmationSchema,
+  normalize: normalizeBankConfirmation,
+  validate: validateBankConfirmation,
 
   reviewPolicy: {
     confidenceThreshold: 0.9,
-  
-    // Keep all uploaded IDs under human review during the pilot.
+
+    // Keep all uploaded bank confirmations under human review during the pilot.
     alwaysReview: true,
-  
+
     reviewOnTypeMismatch: true,
     reviewOnExtractionFailure: true,
     reviewOnValidationFailure: true,
     reviewOnLowConfidence: true,
-  
+
     requiredFields: [
-      "surname",
-      "given_names",
-      "gender",
-      "nationality",
-      "id_number",
-      "date_of_birth",
-      "citizenship_status"
+      "bank_name",
+      "branch_code",
+      "account_holder",
+      "account_number",
+      "account_type"
     ]
   },
 

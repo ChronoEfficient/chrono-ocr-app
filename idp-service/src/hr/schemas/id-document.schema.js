@@ -36,14 +36,6 @@ export const idDocumentSchema = {
         "date_of_expiry"
       ]
     },
-    warnings: {
-      type: "array",
-      items: { type: "string" }
-    },
-    validation_issues: {
-      type: "array",
-      items: { type: "string" }
-    },
     confidence: { type: "number" }
   },
   required: [
@@ -51,8 +43,6 @@ export const idDocumentSchema = {
     "is_document_type_match",
     "extraction_status",
     "fields",
-    "warnings",
-    "validation_issues",
     "confidence"
   ]
 };

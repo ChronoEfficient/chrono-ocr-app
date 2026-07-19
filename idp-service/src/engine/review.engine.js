@@ -26,7 +26,11 @@ function normalizeExtractionStatus(value) {
   return normalizedValue || "UNKNOWN";
 }
 
-function normalizeIssues(issues) {
+/**
+ * Converts strings or partial issue objects into
+ * the enterprise Issue model.
+ */
+function normalizeIssues(issues, source = "SYSTEM") {
   if (!Array.isArray(issues)) {
     return [];
   }
@@ -34,18 +38,31 @@ function normalizeIssues(issues) {
   return issues
     .map((issue) => {
       if (typeof issue === "string") {
-        return issue.trim();
+        return {
+          source,
+          code: "GENERAL",
+          severity: "WARNING",
+          field: null,
+          message: issue.trim()
+        };
       }
 
-      if (
-        issue &&
-        typeof issue === "object" &&
-        typeof issue.message === "string"
-      ) {
-        return issue.message.trim();
+      if (!issue || typeof issue !== "object") {
+        return null;
       }
 
-      return String(issue ?? "").trim();
+      return {
+        source,
+        code: issue.code ?? "GENERAL",
+        severity: issue.severity ?? "WARNING",
+        field: issue.field ?? null,
+        message:
+          issue.message ??
+          issue.code ??
+          "Unknown issue",
+        expected: issue.expected,
+        actual: issue.actual
+      };
     })
     .filter(Boolean);
 }
@@ -94,33 +111,6 @@ function resolveRequiredFields({
   return [];
 }
 
-/**
- * Determines whether a document requires human review.
- *
- * Supports the current processor contract:
- *
- * {
- *   extractionStatus,
- *   confidence,
- *   confidenceThreshold,
- *   extractedData,
- *   validation,
- *   quality,
- *   typeMatch,
- *   requiredFields,
- *   policy
- * }
- *
- * It also remains compatible with the previous contract:
- *
- * {
- *   validation,
- *   extractedResult,
- *   qualityAssessment,
- *   reviewPolicy,
- *   qualityPolicy
- * }
- */
 export function evaluateReview({
   extractionStatus,
   confidence,
@@ -132,13 +122,14 @@ export function evaluateReview({
   requiredFields,
   policy,
 
-  // Backward-compatible properties
+  // Backward compatibility
   extractedResult,
   qualityAssessment,
   reviewPolicy,
   qualityPolicy
 } = {}) {
-  const reasons = [];
+
+  const reviewIssues = [];
 
   const resolvedReviewPolicy =
     policy ??
@@ -153,15 +144,15 @@ export function evaluateReview({
   const resolvedExtractionStatus =
     normalizeExtractionStatus(
       extractionStatus ??
-        extractedResult?.extraction_status ??
-        extractedResult?.extractionStatus ??
-        extractedResult?.status
+      extractedResult?.extraction_status ??
+      extractedResult?.extractionStatus ??
+      extractedResult?.status
     );
 
   const resolvedConfidence =
     normalizeConfidence(
       confidence ??
-        extractedResult?.confidence
+      extractedResult?.confidence
     );
 
   const resolvedTypeMatch =
@@ -203,106 +194,169 @@ export function evaluateReview({
     });
 
   /*
-   * Validation failure.
+   * Validation
    */
+
   if (
     resolvedReviewPolicy.reviewOnValidationFailure !== false &&
     validation?.valid === false
   ) {
-    reasons.push(
-      ...normalizeIssues(validation.issues)
+    reviewIssues.push(
+      ...normalizeIssues(
+        validation.issues,
+        "VALIDATION"
+      )
     );
   }
 
   /*
-   * Document type mismatch.
+   * Document type mismatch
    */
+
   if (
     resolvedReviewPolicy.reviewOnTypeMismatch !== false &&
     resolvedTypeMatch !== true
   ) {
-    reasons.push(
-      "Uploaded document does not match the requested document type."
-    );
+    reviewIssues.push({
+      source: "EXTRACTION",
+      code: "DOCUMENT_TYPE_MISMATCH",
+      severity: "ERROR",
+      field: null,
+      message:
+        "Uploaded document does not match the requested document type."
+    });
   }
 
   /*
-   * Extraction did not complete successfully.
+   * Extraction failure
    */
+
   if (
     resolvedReviewPolicy.reviewOnExtractionFailure !== false &&
     resolvedExtractionStatus !== "SUCCESS"
   ) {
-    reasons.push(
-      `Extraction status is ${resolvedExtractionStatus}.`
-    );
+    reviewIssues.push({
+      source: "EXTRACTION",
+      code: "EXTRACTION_FAILED",
+      severity: "ERROR",
+      field: null,
+      message:
+        `Extraction status is ${resolvedExtractionStatus}.`
+    });
   }
 
   /*
-   * Confidence below threshold.
+   * Confidence
    */
+
   if (
     resolvedReviewPolicy.reviewOnLowConfidence !== false &&
     resolvedConfidence < resolvedConfidenceThreshold
   ) {
-    reasons.push(
-      `Confidence ${resolvedConfidence} is below the threshold ` +
-        `${resolvedConfidenceThreshold}.`
-    );
+    reviewIssues.push({
+      source: "EXTRACTION",
+      code: "LOW_CONFIDENCE",
+      severity: "WARNING",
+      field: null,
+      message:
+        `Confidence ${resolvedConfidence} is below the threshold ${resolvedConfidenceThreshold}.`
+    });
   }
 
   /*
-   * Missing required fields.
+   * Missing required fields
    */
+
   for (const fieldName of resolvedRequiredFields) {
+
     if (
       isMissingRequiredValue(
         resolvedExtractedData[fieldName]
       )
     ) {
-      reasons.push(
-        `Required field '${fieldName}' was not extracted.`
-      );
+      reviewIssues.push({
+        source: "EXTRACTION",
+        code: "MISSING_REQUIRED_FIELD",
+        severity: "ERROR",
+        field: fieldName,
+        message:
+          `Required field '${fieldName}' was not extracted.`
+      });
     }
+
   }
 
   /*
-   * Document quality warnings.
+   * Quality
    */
+
   if (
     resolvedQualityPolicy.reviewOnWarning !== false &&
     resolvedQuality.reviewRequired === true
   ) {
-    reasons.push(
-      ...normalizeIssues(resolvedQuality.issues),
-      ...normalizeIssues(resolvedQuality.warnings)
+
+    reviewIssues.push(
+      ...normalizeIssues(
+        resolvedQuality.issues,
+        "QUALITY"
+      ),
+      ...normalizeIssues(
+        resolvedQuality.warnings,
+        "QUALITY"
+      )
     );
+
   }
 
   /*
-   * Always-review policy.
+   * Always Review
    */
+
   if (resolvedReviewPolicy.alwaysReview === true) {
-    reasons.push(
-      "Human review is required by the document review policy."
-    );
+
+    reviewIssues.push({
+      source: "POLICY",
+      code: "ALWAYS_REVIEW",
+      severity: "INFO",
+      field: null,
+      message:
+        "Human review is required by the document review policy."
+    });
+
   }
 
-  const uniqueReasons = [
-    ...new Set(
-      reasons
-        .map((reason) => String(reason).trim())
-        .filter(Boolean)
-    )
-  ];
+  /*
+   * Remove duplicates.
+   */
+
+  const uniqueIssues = Array.from(
+    new Map(
+      reviewIssues.map(issue => [
+        `${issue.code}:${issue.field ?? ""}:${issue.message}`,
+        issue
+      ])
+    ).values()
+  );
 
   return {
-    required: uniqueReasons.length > 0,
-    reasons: uniqueReasons,
+
+    required: uniqueIssues.length > 0,
+
+    /*
+     * New enterprise contract.
+     */
+    issues: uniqueIssues,
+
+    /*
+     * Backwards compatibility.
+     */
+    reasons: uniqueIssues.map(issue => issue.message),
+
     confidenceThreshold:
       resolvedConfidenceThreshold,
 
     policy: {
+
       alwaysReview:
         resolvedReviewPolicy.alwaysReview === true,
 
@@ -318,7 +372,11 @@ export function evaluateReview({
       reviewOnLowConfidence:
         resolvedReviewPolicy.reviewOnLowConfidence !== false,
 
-      requiredFields: resolvedRequiredFields
+      requiredFields:
+        resolvedRequiredFields
+
     }
+
   };
+
 }

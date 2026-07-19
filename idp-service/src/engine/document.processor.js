@@ -140,17 +140,6 @@ export async function processDocument({
     });
   }
 
-  const model =
-    definition.model ||
-    process.env.GEMINI_OCR_MODEL ||
-    "gemini-2.5-flash";
-
-  const temperature =
-    definition.temperature ??
-    Number(
-      process.env.GEMINI_TEMPERATURE ?? 0.1
-    );
-
   /*
    * 4. Gemini extraction
    *
@@ -179,12 +168,11 @@ export async function processDocument({
   try {
     geminiResult =
       await extractDocumentWithGemini({
-        model,
-        prompt,
-        schema: definition.schema,
-        mimeType,
-        filePath,
-        temperature
+       ai: definition.ai,
+       prompt,
+       schema: definition.schema,
+       mimeType,
+       filePath
       });
   } catch (error) {
     throw mapGeminiError(error);
@@ -326,16 +314,13 @@ export async function processDocument({
   /*
    * 9. Manual-review evaluation
    */
-  const confidenceThreshold =
-    definition.confidenceThreshold ??
-    definition.reviewPolicy
-      ?.confidenceThreshold ??
-    0.9;
 
+  const confidenceThreshold =
+    definition.reviewPolicy?.confidenceThreshold ??
+    0.9;
+  
   const requiredFields =
-    definition.requiredFields ??
-    definition.reviewPolicy
-      ?.requiredFields ??
+    definition.reviewPolicy?.requiredFields ??
     [];
 
   const review = evaluateReview({
@@ -421,51 +406,70 @@ export async function processDocument({
 
     review,
 
-    processing: {
-      provider: "GOOGLE_VERTEX_AI",
 
-      model:
-        geminiMetadata.model ??
-        model,
-
-      traffic: {
-        type:
-          geminiMetadata.trafficType ??
-          "UNKNOWN",
-
-        description: describeTrafficType(
-          geminiMetadata.trafficType
-        )
-      },
-
-      finishReason:
-        geminiMetadata.finishReason ??
-        null,
-
-      tokenUsage: {
-        promptTokens:
-          geminiMetadata.tokenUsage
-            ?.promptTokens ??
-          null,
-
-        candidateTokens:
-          geminiMetadata.tokenUsage
-            ?.candidateTokens ??
-          null,
-
-        totalTokens:
-          geminiMetadata.tokenUsage
-            ?.totalTokens ??
-          null
-      },
-
-      temperature,
-      definitionVersion:
-        definition.version ?? "1.0",
-      startedAt,
-      completedAt,
-      durationMs
-    }
+   processing: {
+     provider:
+       geminiMetadata.provider ??
+       "GOOGLE_VERTEX_AI",
+   
+     aiProvider:
+       geminiMetadata.aiProvider ??
+       "gemini",
+   
+     model:
+       geminiMetadata.model ??
+       null,
+   
+     traffic: {
+       type:
+         geminiMetadata.trafficType ??
+         "UNKNOWN",
+   
+       description: describeTrafficType(
+         geminiMetadata.trafficType
+       )
+     },
+   
+     finishReason:
+       geminiMetadata.finishReason ??
+       null,
+   
+     tokenUsage: {
+       promptTokens:
+         geminiMetadata.tokenUsage
+           ?.promptTokens ??
+         null,
+   
+       candidateTokens:
+         geminiMetadata.tokenUsage
+           ?.candidateTokens ??
+         null,
+   
+       totalTokens:
+         geminiMetadata.tokenUsage
+           ?.totalTokens ??
+         null
+     },
+   
+     temperature:
+       geminiMetadata.temperature ??
+       null,
+   
+     maxOutputTokens:
+       geminiMetadata.maxOutputTokens ??
+       null,
+   
+     responseMimeType:
+       geminiMetadata.responseMimeType ??
+       null,
+   
+     definitionVersion:
+       definition.version ?? "1.0",
+   
+     startedAt,
+     completedAt,
+     durationMs
+   }
   };
 }
 
