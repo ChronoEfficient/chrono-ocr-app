@@ -3,7 +3,7 @@ import path from "node:path";
 import { getDocumentConfiguration } from "./document.registry.js";
 import { validateFile } from "./file.validator.js";
 import { assessDocumentQuality } from "./document-quality.assessor.js";
-import { extractDocumentWithGemini } from "./gemini.client.js";
+import { extractDocumentWithGemini } from "../platform/ai/providers/gemini.client.js";
 import { evaluateReview } from "./review.engine.js";
 
 /**
