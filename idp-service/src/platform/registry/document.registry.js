@@ -1,5 +1,5 @@
-import { hrDocumentRegistry } from "../hr/index.js";
-import { procurementDocumentRegistry } from "../procurement/index.js";
+import { hrDocumentRegistry } from "../../hr/index.js";
+import { procurementDocumentRegistry } from "../../procurement/index.js";
 
 const domainRegistries = {
   hr: hrDocumentRegistry,

@@ -1,0 +1,173 @@
+❯ curl -s -X POST http://localhost:8080/documents/extract \
+  -F "domain=hr" \
+  -F "documentType=ID_DOCUMENT" \
+  -F "processingId=DOC-20260717-000001" \
+  -F "document=@../images-2.jpeg" \
+  | python3 -m json.tool
+{
+    "status": "success",
+    "processingId": "DOC-20260717-000001",
+    "document": {
+        "domain": "hr",
+        "type": "ID_DOCUMENT",
+        "name": "South African Identity Document",
+        "detectedType": "ID_DOCUMENT",
+        "typeMatch": true,
+        "version": "1.0",
+        "file": {
+            "originalName": "images-2.jpeg",
+            "mimeType": "image/jpeg",
+            "extension": ".jpeg",
+            "sizeBytes": 19781,
+            "maximumSizeBytes": 10485760,
+            "maximumSizeMb": 10
+        }
+    },
+    "quality": {
+        "status": "ASSESSED",
+        "acceptable": true,
+        "reviewRequired": true,
+        "issues": [],
+        "warnings": [
+            "Image resolution 534\u00d7374 is below the recommended minimum of 600\u00d7400.",
+            "The image contains fewer pixels than recommended for reliable extraction.",
+            "The image may be blurred. Sharpness score 4.27 is below the configured threshold 12."
+        ],
+        "metrics": {
+            "mimeType": "image/jpeg",
+            "format": "jpeg",
+            "width": 534,
+            "height": 374,
+            "pixelCount": 199716,
+            "orientation": null,
+            "density": 72,
+            "sharpnessScore": 4.27
+        },
+        "policy": {
+            "minimumWidth": 600,
+            "minimumHeight": 400,
+            "minimumPixelCount": 300000,
+            "minimumSharpnessScore": 12,
+            "rejectBelowWidth": 250,
+            "rejectBelowHeight": 150
+        }
+    },
+    "extraction": {
+        "status": "SUCCESS",
+        "confidence": 0.95,
+        "data": {
+            "surname": "Cengimbo",
+            "given_names": "Thuso Carlo",
+            "gender": "MALE",
+            "nationality": "ZA",
+            "id_number": "6308125520085",
+            "date_of_birth": "1963-08-12",
+            "country_of_birth": "ZA",
+            "citizenship_status": "CITIZEN",
+            "document_number": null,
+            "date_of_issue": null,
+            "date_of_expiry": null
+        },
+        "warnings": []
+    },
+    "validation": {
+        "valid": false,
+        "issues": [
+            {
+                "code": "INVALID_ID_CHECKSUM",
+                "field": "id_number"
+            }
+        ],
+        "derivedData": {
+            "date_of_birth": "1963-08-12",
+            "gender": "MALE",
+            "citizenship_status": "CITIZEN"
+        }
+    },
+    "review": {
+        "required": true,
+        "issues": [
+            {
+                "source": "VALIDATION",
+                "code": "INVALID_ID_CHECKSUM",
+                "severity": "WARNING",
+                "field": "id_number",
+                "message": "INVALID_ID_CHECKSUM"
+            },
+            {
+                "source": "QUALITY",
+                "code": "GENERAL",
+                "severity": "WARNING",
+                "field": null,
+                "message": "Image resolution 534\u00d7374 is below the recommended minimum of 600\u00d7400."
+            },
+            {
+                "source": "QUALITY",
+                "code": "GENERAL",
+                "severity": "WARNING",
+                "field": null,
+                "message": "The image contains fewer pixels than recommended for reliable extraction."
+            },
+            {
+                "source": "QUALITY",
+                "code": "GENERAL",
+                "severity": "WARNING",
+                "field": null,
+                "message": "The image may be blurred. Sharpness score 4.27 is below the configured threshold 12."
+            },
+            {
+                "source": "POLICY",
+                "code": "ALWAYS_REVIEW",
+                "severity": "INFO",
+                "field": null,
+                "message": "Human review is required by the document review policy."
+            }
+        ],
+        "reasons": [
+            "INVALID_ID_CHECKSUM",
+            "Image resolution 534\u00d7374 is below the recommended minimum of 600\u00d7400.",
+            "The image contains fewer pixels than recommended for reliable extraction.",
+            "The image may be blurred. Sharpness score 4.27 is below the configured threshold 12.",
+            "Human review is required by the document review policy."
+        ],
+        "confidenceThreshold": 0.9,
+        "policy": {
+            "alwaysReview": true,
+            "reviewOnTypeMismatch": true,
+            "reviewOnExtractionFailure": true,
+            "reviewOnValidationFailure": true,
+            "reviewOnLowConfidence": true,
+            "requiredFields": [
+                "surname",
+                "given_names",
+                "gender",
+                "nationality",
+                "id_number",
+                "date_of_birth",
+                "citizenship_status"
+            ]
+        }
+    },
+    "processing": {
+        "provider": "GOOGLE_VERTEX_AI",
+        "aiProvider": "gemini",
+        "model": "gemini-2.5-flash",
+        "traffic": {
+            "type": "ON_DEMAND_PRIORITY",
+            "description": "Unknown"
+        },
+        "finishReason": "STOP",
+        "tokenUsage": {
+            "promptTokens": 2433,
+            "candidateTokens": 198,
+            "totalTokens": 3155
+        },
+        "temperature": 0,
+        "maxOutputTokens": null,
+        "responseMimeType": "application/json",
+        "definitionVersion": "1.0",
+        "startedAt": "2026-07-20T12:22:28.541Z",
+        "completedAt": "2026-07-20T12:22:34.585Z",
+        "durationMs": 6044
+    }
+}
