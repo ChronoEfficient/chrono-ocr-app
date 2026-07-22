@@ -1,5 +1,5 @@
 import fs from "fs/promises";
-import { processDocument } from "../../engine/document.processor.js";
+import { processDocument } from "../../platform/processor/document.processor.js";
 import { validateProcessingId } from "../../platform/validation/processing-id.validator.js";
 
 export async function extractDocument(req, res) {
@@ -7,7 +7,6 @@ export async function extractDocument(req, res) {
 
   try {
     const suppliedProcessingId = req.body.processingId;
-    const domain = req.body.domain || "hr";
     const documentType = req.body.documentType;
 
     const processingIdValidation =
@@ -49,7 +48,6 @@ export async function extractDocument(req, res) {
 
     const result = await processDocument({
       processingId,
-      domain,
       documentType,
       filePath,
       mimeType: req.file.mimetype,

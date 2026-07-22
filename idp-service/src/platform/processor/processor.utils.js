@@ -83,20 +83,20 @@ export function uniqueMessages(values) {
 }
 
 /**
- * Converts internal traffic type to a human readable description.
+ * Converts internal traffic type to a human-readable description.
  */
 export function describeTrafficType(trafficType) {
-    switch (trafficType) {
-        case "PRIORITY_GO":
-            return "PriorityGo";
+  switch (trafficType) {
+    case "ON_DEMAND":
+      return "Standard on-demand processing";
 
-        case "LOW_LATENCY":
-            return "Low Latency";
+    case "ON_DEMAND_PRIORITY":
+      return "Priority on-demand processing";
 
-        case "STANDARD":
-            return "Standard";
+    case "PROVISIONED_THROUGHPUT":
+      return "Provisioned throughput processing";
 
-        default:
-            return "Unknown";
-    }
+    default:
+      return "Unknown";
+  }
 }

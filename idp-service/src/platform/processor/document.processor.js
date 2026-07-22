@@ -4,38 +4,38 @@ import path from "node:path";
 /* Registry                                                                   */
 /* -------------------------------------------------------------------------- */
 
-import { getDocumentConfiguration } from "../platform/registry/document.registry.js";
+import { getDocumentConfiguration } from "../registry/document.registry.js";
 
 /* -------------------------------------------------------------------------- */
 /* Validation                                                                 */
 /* -------------------------------------------------------------------------- */
 
-import { validateUploadedFile } from "../platform/validation/file.validator.js";
-import { validateProcessingRequest } from "../platform/validation/processing-request.validator.js";
+import { validateUploadedFile } from "../validation/file.validator.js";
+import { validateProcessingRequest } from "../validation/processing-request.validator.js";
 
 /* -------------------------------------------------------------------------- */
 /* Artificial Intelligence                                                    */
 /* -------------------------------------------------------------------------- */
 
-import { extractDocumentWithGemini } from "../platform/ai/providers/gemini.client.js";
+import { extractDocumentWithGemini } from "../ai/providers/gemini.client.js";
 
 /* -------------------------------------------------------------------------- */
 /* Quality                                                                    */
 /* -------------------------------------------------------------------------- */
 
-import { assessDocumentQuality } from "../platform/quality/document-quality.assessor.js";
+import { assessDocumentQuality } from "../quality/document-quality.assessor.js";
 
 /* -------------------------------------------------------------------------- */
 /* Review                                                                     */
 /* -------------------------------------------------------------------------- */
 
-import { evaluateReview } from "../platform/review/review.engine.js";
+import { evaluateReview } from "../review/review.engine.js";
 
 /* -------------------------------------------------------------------------- */
 /* Processing                                                                 */
 /* -------------------------------------------------------------------------- */
 
-import { evaluateTypeMatch } from "../platform/processor/type.matcher.js";
+import { evaluateTypeMatch } from "./type.matcher.js";
 
 import {
   describeTrafficType,
@@ -43,12 +43,12 @@ import {
   normaliseConfidence,
   normaliseExtractionStatus,
   uniqueMessages
-} from "../platform/processor/processor.utils.js";
+} from "./processor.utils.js";
 
 import {
   createProcessingError,
   mapGeminiError
-} from "../platform/processor/processor.errors.js";
+} from "./processor.errors.js";
 
 /* -------------------------------------------------------------------------- */
 /* Document Processing                                                        */
@@ -59,7 +59,6 @@ import {
  *
  * @param {Object} params
  * @param {string} params.processingId
- * @param {string} params.domain
  * @param {string} params.documentType
  * @param {string} params.filePath
  * @param {string} params.originalName
@@ -70,7 +69,6 @@ import {
  */
 export async function processDocument({
   processingId,
-  domain,
   documentType,
   filePath,
   originalName,
@@ -86,7 +84,6 @@ export async function processDocument({
 
   validateProcessingRequest({
     processingId,
-    domain,
     documentType,
     filePath,
     originalName,
@@ -99,7 +96,6 @@ export async function processDocument({
   /* ------------------------------------------------------------------------ */
 
   const definition = getDocumentConfiguration(
-    domain,
     documentType
   );
 
@@ -107,11 +103,9 @@ export async function processDocument({
     throw createProcessingError({
       code: "DOCUMENT_DEFINITION_NOT_FOUND",
       message:
-        `No document definition was found for domain '${domain}' ` +
-        `and document type '${documentType}'.`,
+        `No document definition was found for document type '${documentType}'.`,
       retryable: false,
       details: {
-        domain,
         documentType
       }
     });
@@ -175,7 +169,6 @@ export async function processDocument({
     typeof definition.buildPrompt === "function"
       ? definition.buildPrompt({
           processingId,
-          domain,
           documentType,
           originalName,
           mimeType,
@@ -190,7 +183,6 @@ export async function processDocument({
         `No extraction prompt is configured for document type '${documentType}'.`,
       retryable: false,
       details: {
-        domain,
         documentType
       }
     });
@@ -378,7 +370,6 @@ export async function processDocument({
     processingId,
 
     document: {
-      domain,
       type: documentType,
       name: definition.name,
       detectedType,

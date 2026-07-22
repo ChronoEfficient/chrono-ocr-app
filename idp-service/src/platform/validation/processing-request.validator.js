@@ -12,7 +12,6 @@
  *
  * @param {object} params
  * @param {string} params.processingId
- * @param {string} params.domain
  * @param {string} params.documentType
  * @param {string} params.filePath
  * @param {string} params.originalName
@@ -21,7 +20,6 @@
  */
 export function validateProcessingRequest({
     processingId,
-    domain,
     documentType,
     filePath,
     originalName,

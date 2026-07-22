@@ -1,28 +1,26 @@
-import { hrDocumentRegistry } from "../../hr/index.js";
-import { procurementDocumentRegistry } from "../../procurement/index.js";
+import { documentDefinitionRegistry } from "../../knowledge/documents/index.js";
 
-const domainRegistries = {
-  hr: hrDocumentRegistry,
-  procurement: procurementDocumentRegistry
-};
+export function getDocumentConfiguration(documentType) {
+  const normalizedDocumentType = String(documentType ?? "")
+    .trim()
+    .toUpperCase();
 
-export function getDocumentConfiguration(domain, documentType) {
-  const normalizedDomain = String(domain).toLowerCase();
-  const normalizedDocumentType = String(documentType).toUpperCase();
-
-  const registry = domainRegistries[normalizedDomain];
-
-  if (!registry) {
-    throw new Error(`Unsupported domain: ${domain}`);
+  if (!normalizedDocumentType) {
+    throw new Error("Document type is required.");
   }
 
-  const configuration = registry[normalizedDocumentType];
+  const definition =
+    documentDefinitionRegistry[normalizedDocumentType];
 
-  if (!configuration) {
+  if (!definition) {
     throw new Error(
-      `Unsupported document type '${documentType}' for domain '${domain}'`
+      `Unsupported document type: ${normalizedDocumentType}`
     );
   }
 
-  return configuration;
+  return definition;
+}
+
+export function getAllDocumentDefinitions() {
+  return Object.values(documentDefinitionRegistry);
 }
