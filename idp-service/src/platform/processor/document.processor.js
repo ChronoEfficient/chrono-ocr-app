@@ -202,6 +202,11 @@ export async function processDocument({
       mimeType,
       filePath
     });
+/*
+console.log("\n========== GEMINI RESULT ==========");
+console.log(JSON.stringify(geminiResult, null, 2));
+console.log("===================================\n");
+*/
   } catch (error) {
     throw mapGeminiError(error);
   }
@@ -211,6 +216,11 @@ export async function processDocument({
     typeof geminiResult.extraction === "object"
       ? geminiResult.extraction
       : {};
+/*
+console.log("\n========== RAW EXTRACTION ==========");
+console.log(JSON.stringify(rawExtraction, null, 2));
+console.log("====================================\n");
+*/
 
   const geminiMetadata =
     geminiResult?.metadata &&
@@ -241,6 +251,11 @@ export async function processDocument({
             ? rawExtraction.extractedFields
             : {};
 
+/*
+console.log("\n========== EXTRACTED FIELDS ==========");
+console.log(JSON.stringify(extractedFields, null, 2));
+console.log("======================================\n");
+*/
   /* ------------------------------------------------------------------------ */
   /* 6. Normalisation                                                         */
   /* ------------------------------------------------------------------------ */
@@ -249,6 +264,11 @@ export async function processDocument({
     typeof definition.normalize === "function"
       ? definition.normalize(extractedFields)
       : extractedFields;
+/*
+console.log("\n========== NORMALISED DATA ==========");
+console.log(JSON.stringify(normalisedData, null, 2));
+console.log("=====================================\n");
+*/
 
   /* ------------------------------------------------------------------------ */
   /* 7. Business validation                                                   */

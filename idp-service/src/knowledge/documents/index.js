@@ -1,9 +1,17 @@
 import { idDocumentDefinition } from "./id-document/definition.js";
 import { bankConfirmationDefinition } from "./bank-confirmation/definition.js";
+import { proofOfAddressDefinition } from "./proof-of-address/definition.js";
+import { registrationCertificateDefinition } from "./registration-certificate/definition.js";
+import { passportDocumentDefinition } from "./passport/definition.js";
+import { procurementDocumentDefinition } from "./procurement-document/definition.js";
 
 export const documentDefinitions = [
   idDocumentDefinition,
-  bankConfirmationDefinition
+  bankConfirmationDefinition,
+  proofOfAddressDefinition,
+  registrationCertificateDefinition,
+  passportDocumentDefinition,
+  procurementDocumentDefinition 
 ];
 
 function buildDocumentDefinitionRegistry(definitions) {
